@@ -15,6 +15,7 @@ class PathConfig:
 
     # Below is experiment-wise path
     train_dir: str = "runs"
+    configs_dir: str = "configs"
     logging_dir: str = "logging"
     logger_filename = "train.log"
     tb_dir: str = "tensorboard"
@@ -28,12 +29,16 @@ class PathConfig:
         self.data_dir = os.path.join(self.root_path, self.data_dir)
         self.expr_dir = os.path.join(self.root_path, self.expr_dir)
         self.ensure_dir(self.data_dir)
-        self.ensure_dir(self.expr_dir)
+        self.raw_dir = os.path.join(self.data_dir, self.raw_dir)
+        self.processed_dir = os.path.join(self.data_dir, self.processed_dir)
+        self.ensure_dir(self.raw_dir)
+        self.ensure_dir(self.processed_dir)
         self.train_raw_path = os.path.join(self.raw_dir, "train.parquet")
         self.test_raw_path = os.path.join(self.raw_dir, "test.parquet")
         self.processed_dir = os.path.join(self.data_dir, "processed")
         self.train_processed_path = os.path.join(self.processed_dir, "train.parquet")
         self.test_processed_path = os.path.join(self.processed_dir, "test.parquet")
+        self.ensure_dir(self.expr_dir)
 
     def ensure_dir(self, path: dir):
         if not os.path.exists(path):
@@ -48,6 +53,7 @@ class PathConfig:
         self.expr_specific_dir = os.path.join(self.expr_dir, self.expr_name)
         self.train_dir = os.path.join(self.expr_specific_dir, self.train_dir)
 
+        self.configs_dir = os.path.join(self.train_dir, self.configs_dir)
         self.logging_dir = os.path.join(self.train_dir, self.logging_dir)
         self.logging_path = os.path.join(self.logging_dir, self.logger_filename)
         self.tb_dir = os.path.join(self.train_dir, self.tb_dir)
@@ -57,8 +63,8 @@ class PathConfig:
 
         self.ensure_dir(self.train_dir)
         self.ensure_dir(self.expr_dir)
+        self.ensure_dir(self.configs_dir)
         self.ensure_dir(self.logging_dir)
-        self.ensure_dir(self.logging_path)
         self.ensure_dir(self.tb_dir)
         self.ensure_dir(self.models_dir)
         self.ensure_dir(self.results_dir)

@@ -7,19 +7,20 @@ from utils.seed import set_seed
 
 
 def main(args):
-    set_seed(args.seed)
     root_path = args.root_path
-    path_config = PathConfig(root_path)
+
+    path_config = PathConfig(root_path=root_path)
     data_config = DataConfig()
-    continue_learning = args.continue_learning
-    train_config = TrainConfig()
     model_config = ModelConfig()
-    if continue_learning:
-        train_config.continue_learning = True
-        train_config.continue_expr = args.expr
+    train_config = TrainConfig()
+
     if args.model == "GRU":
         trainer = GRUTrainer(model_config, train_config,
                              data_config, path_config)
     else:
-        raise NotImplementedError
-    trainer.train()
+        raise NotImplementedError(f"Model {args.model} not implemented")
+
+    test_loss = trainer.test(expr=args.expr)
+    print(f"Test loss: {test_loss}")
+
+    return

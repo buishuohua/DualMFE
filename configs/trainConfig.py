@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+import os
+import json
 import torch
 import torch.nn as nn
 from torch.optim import Adam, AdamW
@@ -51,3 +53,22 @@ class TrainConfig:
             return nn.MSELoss(reduction="mean")
         else:
             raise NotImplementedError
+
+    def to_dict(self):
+        return self.__dict__
+
+    def to_json(self, path: str):
+        file_name = os.path.join(path, "train_config.json")
+        with open(file_name, "w") as f:
+            json.dump(self.to_dict(), f, indent=4, separators=(",", ": "))
+
+    @classmethod
+    def from_dict(cls, dict: dict):
+        for key, value in dict.items():
+            setattr(cls, key, value)
+
+    @classmethod
+    def from_json(cls, path: str):
+        with open(path, "r") as f:
+            dict = json.load(f)
+        cls.from_dict(dict)

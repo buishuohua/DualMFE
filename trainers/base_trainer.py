@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import logging
-import json
 import os
+import sys
 import torch
 from torch.utils.tensorboard import SummaryWriter
 import pandas as pd
@@ -18,11 +18,12 @@ class BaseTrainer(ABC):
         self.path_config = path_config
         self._parse_params()
 
-    @abstractmethod
-    def build_model(self):
-        pass
     # TODO: Check if there is a more brilliant way to organize the parse and init
     def _parse_params(self):
+        self.feature_engineering = self.data_config.feature_engineering
+        self.train_data = self.path_config.train_processed_path if self.feature_engineering else self.path_config.train_raw_path
+        self.test_data = self.path_config.test_processed_path if self.feature_engineering else self.path_config.test_raw_path
+        self.val_ratio = self.data_config.val_size
         self.num_epochs = self.train_config.num_epochs
         self.save_freq = self.train_config.save_freq
         self.continue_learning = self.train_config.continue_learning
@@ -32,7 +33,7 @@ class BaseTrainer(ABC):
     def _init(self):
         # TODO: could specify the optimizer and scheduler params
         self.build_model()
-        if not hasattr(self, "model"):
+        if not hasattr(self, "model") or self.model is None:
             raise NotImplementedError("Model not built")
         self.optimizer = self.train_config.get_optimizer(self.model)
         self.scheduler = self.train_config.get_shceduler(self.optimizer)
@@ -44,14 +45,23 @@ class BaseTrainer(ABC):
         self.best_loss = float("inf")
         self.loss = 0
         self.path_config.create_expr()
+        if not hasattr(self, "logger"):
+            self.init_logging()
+        if not hasattr(self, "writer"):
+            self.init_tensorboard()
 
-    def init_loggings(self):
-        # TODO: May can be simplified in the logging_path
-        self.logger = logging.basicConfig(
+    def init_logging(self):
+        logging.basicConfig(
             filename=self.path_config.logging_path, level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+        self.logger = logging.getLogger()
 
     def init_tensorboard(self):
         self.writer = SummaryWriter(self.path_config.tb_dir)
+
+    def save_config(self):
+        self.data_config.to_json(self.path_config.configs_dir)
+        self.train_config.to_json(self.path_config.configs_dir)
+        self.model_config.to_json(self.path_config.configs_dir)
 
     def save_model(self, best: bool = False):
         ckpt = {
@@ -69,9 +79,11 @@ class BaseTrainer(ABC):
             ckpt_name = "ckpt_best.pth"
         else:
             ckpt_name = f"ckpt_{self.epoch}.pth"
-        torch.save(ckpt, self.path_config.models_dir, ckpt_name)
+        ckpt_path = os.path.join(self.path_config.models_dir, ckpt_name)
+        torch.save(ckpt, ckpt_path)
 
     def load_model(self, expr: str = None, epoch: int = None, best: bool = False):
+        # TODO: Set default to continue learning at the latest checkpoint
         if expr is None:
             expr = self.path_config.find_latest_expr()
         self.path_config.create_expr(expr)
@@ -87,14 +99,34 @@ class BaseTrainer(ABC):
         if not os.path.exists(model_path):
             raise NoCheckpointFound()
         ckpt = torch.load(model_path)
+        self._init()
         self.model.load_state_dict(ckpt["model_state_dict"])
         self.optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        for state in self.optimizer.state.values():
+            for k, v in state.items():
+                if isinstance(v, torch.Tensor):
+                    state[k] = v.to(self.device)
         self.scheduler.load_state_dict(ckpt["scheduler_state_dict"])
         self.epoch = ckpt["epoch"]
         self.early_stopped = ckpt["early_stopped"]
         self.early_stop_count = ckpt["early_stop_count"]
         self.best_epoch = ckpt["best_epoch"]
         self.best_loss = ckpt["best_loss"]
+
+    def handle_early_stopped(self):
+        if self.early_stopped:
+            self.logger.warning(
+                f"Latest Experiment {self.path_config.expr_name} has early stopped")
+            new_expr = input(
+                f"Latest Experiment {self.path_config.expr_name} has early stopped, start a new experiment? (y/n) ")
+            if new_expr.lower() == "y":
+                self._init()
+                self.logger.info("Start training from scratch")
+                self.logger.info(
+                    f"New experiment created: {self.path_config.expr_name}")
+            else:
+                self.logger.info("Refuse to start a new experiment, exit.")
+                sys.exit(1)
 
     def prepare_learning(self):
         if self.continue_learning:
@@ -105,30 +137,30 @@ class BaseTrainer(ABC):
                     latest_expr = None
                 if latest_expr is None:
                     self._init()
-                    self.init_loggings()
-                    self.init_tensorboard()
                     self.logger.info("No experiment found, Start training from scratch")
                     self.logger.info(f"New experiment created: {self.path_config.expr_name}")
                 else:
                     self.load_model(expr=latest_expr, best=False)
+                    self.handle_early_stopped()
+                    self.logger.info(
+                        f"Model loaded, Continue learning from {latest_expr}, Epoch: {self.epoch}")
             else:
                 self.load_model(
                     expr=self.train_config.continue_expr, best=False)
-            if not hasattr(self, "logger"):
-                self.init_loggings()
-            if not hasattr(self, "writer"):
-                self.init_tensorboard()
-            self.logger.info(f"Model loaded, Continue learning from {latest_expr}")
+                self.handle_early_stopped()
+
+                self.logger.info(
+                    f"Model loaded, Continue learning from {self.train_config.continue_expr}, Epoch: {self.epoch}")
         else:
             self._init()
-            self.init_loggings()
-            self.init_tensorboard()
             self.logger.info("Continue learning is False, Start training from scratch")
+            self.logger.info(
+                f"New experiment created: {self.path_config.expr_name}")
+        self.save_config()
+        self.logger.info("Config saved")
 
     def load_train_data(self):
-        train_data_path = self.path_config.train_file_path
-        val_ratio = self.data_config.val_size
-        train, val = train_val_split(train_data_path, val_ratio)
+        train, val = train_val_split(self.train_data, self.val_ratio)
         train_dataset = DualFeature_Dataset(
             train, self.data_config.seq_len, self.data_config.stride)
         val_dataset = DualFeature_Dataset(
@@ -143,8 +175,7 @@ class BaseTrainer(ABC):
             self.val_loader = val_loader
 
     def load_test_data(self):
-        test_data_path = self.path_config.test_file_path
-        test = pd.read_parquet(test_data_path)
+        test = pd.read_parquet(self.test_data)
         test_dataset = DualFeature_Dataset(
             test, self.data_config.seq_len, self.data_config.stride)
         test_loader = DualFeature_DataLoader(
@@ -152,76 +183,18 @@ class BaseTrainer(ABC):
         if not hasattr(self, "test_loader"):
             self.test_loader = test_loader
 
+    @abstractmethod
     def train_epoch(self):
-        self.model.to(self.device)
-        self.model.train()
-        ttl_loss = 0
-        for X, y in self.train_loader:
-            X, y = X.to(self.device), y.to(self.device)
-            output = self.model(X)
-            loss = self.loss_fn(output, y)
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
-            ttl_loss += loss.item()
-        return ttl_loss / len(self.train_loader)
+        pass
 
-    def train(self):
-        self.prepare_learning()
-        self.load_train_data()
-        self.logger.info(
-            "Training dataset and validation dataset loaded successfully, start training...")
-        pbar = tqdm(range(self.epoch, self.num_epochs + 1))
-        for epoch in pbar:
-            train_loss = self.train_epoch()
-            val_loss = self.eval()
-            self.scheduler.step(val_loss)
-            self.writer.add_scalar("Loss/train", train_loss, epoch)
-            self.writer.add_scalar("Loss/val", val_loss, epoch)
-            self.writer.add_scalar(
-                "LR", self.optimizer.param_groups[0]["lr"], epoch)
-
-            if val_loss < self.best_loss:
-                self.best_loss = val_loss
-                self.best_epoch = epoch
-                self.save_model(best=True)
-                self.early_stop_count = 0
-            else:
-                self.early_stop_count += 1
-                if self.early_stop_count >= self.early_stop_patience:
-                    self.early_stopped = True
-                    break
-
-            if self.epoch % self.save_freq == 0:
-                self.save_model()
-
-            pbar.set_description(f"Epoch {epoch}")
-            pbar.update(1)
-            # TODO: maybe mismatch
-            self.epoch += 1
-
+    @abstractmethod
     def eval(self):
-        self.model.to(self.device)
-        self.model.eval()
-        with torch.no_grad():
-            ttl_loss = 0
-            for X, y in self.val_loader:
-                X, y = X.to(self.device), y.to(self.device)
-                output = self.model(X)
-                loss = self.loss_fn(output, y)
-                ttl_loss += loss.item()
-            return ttl_loss / len(self.val_loader)
+        pass
 
-    def test(self, expr: str = None):
-        self.model = self.load_model(expr=expr, best=True)
-        self.model.to(self.device)
-        self.model.eval()
-        self.load_test_data()
-        with torch.no_grad():
-            ttl_loss = 0
-            for X, y in self.test_loader:
-                X, y = X.to(self.device), y.to(self.device)
-                output = self.model(X)
-                loss = self.loss_fn(output, y)
-                ttl_loss += loss.item()
-            return ttl_loss / len(self.test_loader)
+    @abstractmethod
+    def test(self):
+        pass
+
+    @abstractmethod
+    def build_model(self):
+        pass
