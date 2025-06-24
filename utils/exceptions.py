@@ -12,3 +12,15 @@ class ModelNotBuilt(Exception):
     def __init__(self, message="Model not built"):
         self.message = message
         super().__init__(self.message)
+
+
+class ModeNotSupported(Exception):
+    def __init__(self, message="Mode not supported"):
+        self.message = message
+        super().__init__(self.message)
+
+
+class ModelNotSupported(Exception):
+    def __init__(self, message="Model not supported"):
+        self.message = message
+        super().__init__(self.message)

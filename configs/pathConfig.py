@@ -68,6 +68,7 @@ class PathConfig:
         self.ensure_dir(self.tb_dir)
         self.ensure_dir(self.models_dir)
         self.ensure_dir(self.results_dir)
+        self.ensure_dir(self.metrics_dir)
 
     def find_latest_expr(self):
         expr_dirs = os.listdir(self.expr_dir)

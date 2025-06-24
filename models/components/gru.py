@@ -1,0 +1,53 @@
+import torch
+import torch.nn as nn
+
+
+class GRUBlock(nn.Module):
+    def __init__(self, d_model, n_layers, dropout, bidirection, d_ff, activation, ln_eps):
+        super().__init__()
+        self.d_model = d_model
+        self.n_layers = n_layers
+        self.dropout = dropout
+        self.bidirection = bidirection
+        self.gru = nn.GRU(d_model, d_model, n_layers,
+                          batch_first=True, dropout=dropout, bidirectional=bidirection)
+        self.ff = nn.Sequential(
+            nn.Linear(d_model, d_ff),
+            activation,
+            nn.Linear(d_ff, d_model)
+        )
+        self.layernorm1 = nn.LayerNorm(d_model, eps=ln_eps)
+        self.layernorm2 = nn.LayerNorm(d_model, eps=ln_eps)
+        self._init_weights()
+
+    def forward(self, x):
+        residual_x = x
+        x = self.layernorm1(x)
+        if torch.isnan(x).any():
+            print("GRU block layernorm1 contains nan")
+        gru_output, _ = self.gru(x)
+        if torch.isnan(gru_output).any():
+            print("GRU block gru contains nan")
+        x = residual_x + gru_output
+        residual_gru = x
+        x = self.layernorm2(x)
+        if torch.isnan(x).any():
+            print("GRU block layernorm2 contains nan")
+
+        ff_out = self.ff(x)
+        if torch.isnan(ff_out).any():
+            print("GRU block ff contains nan")
+        out = residual_gru + ff_out
+        return out
+
+    def _init_weights(self):
+        for name, param in self.gru.named_parameters():
+            if 'weight' in name:
+                nn.init.kaiming_normal_(param)
+            elif 'bias' in name:
+                nn.init.constant_(param, 0)
+        for name, param in self.ff.named_parameters():
+            if 'weight' in name:
+                nn.init.kaiming_normal_(param)
+            elif 'bias' in name:
+                nn.init.constant_(param, 0)

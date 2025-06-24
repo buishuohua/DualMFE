@@ -12,16 +12,19 @@ class DualFeature_Dataset(Dataset):
 
     def _split_features(self):
         if not hasattr(self, "labels"):
-            self.labels = torch.tensor(self.df["label"].values, dtype = torch.float32)
+            self.labels = torch.nan_to_num(torch.tensor(
+                self.df["label"].values, dtype=torch.float32), 0.0, 0.0, 0.0)
 
         features_columns = self.df.columns.drop("label")
         anonymized_features = features_columns[features_columns.str.startswith("X_")]
         known_features = features_columns[~features_columns.str.startswith("X_")]
 
         if not hasattr(self, "a_features"):
-            self.a_features = torch.tensor(self.df[anonymized_features].values, dtype = torch.float32)
+            self.a_features = torch.nan_to_num(torch.tensor(
+                self.df[anonymized_features].values, dtype=torch.float32), 0.0, 0.0, 0.0)
         if not hasattr(self, "k_features"):
-            self.k_features = torch.tensor(self.df[known_features].values, dtype = torch.float32)
+            self.k_features = torch.nan_to_num(torch.tensor(
+                self.df[known_features].values, dtype=torch.float32), 0.0, 0.0, 0.0)
         if not hasattr(self, "indices"):
             self.indices = torch.arange(0, len(self.labels) - self.seq_len + 1, self.stride)
 

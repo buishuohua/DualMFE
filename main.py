@@ -2,7 +2,7 @@ from scripts import train, test
 import argparse
 import os
 import sys
-
+from utils.exceptions import ModeNotSupported
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -10,7 +10,7 @@ def parse_args():
                         choices=["train", "test"], required=True, help="Mode to run: train or test")
     #TODO: Add more model choices
     parser.add_argument("-mod", "--model", type=str, default="GRU",
-                        choices=["GRU"], required=True, help="Model to use: GRU")
+                        choices=["GRU", "vTransformer"], required=True, help="Model to use: GRU")
 
     parser.add_argument("-s", "--seed", type=int, default=42,
                         help="Random seed")
@@ -32,7 +32,7 @@ def main():
     elif args.mode == "test":
         test.main(args)
     else:
-        raise NotImplementedError
+        raise ModeNotSupported(f"{args.mode} not supported")
 
 if __name__ == "__main__":
     main()
