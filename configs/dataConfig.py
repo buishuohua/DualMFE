@@ -18,12 +18,15 @@ class DataConfig:
             json.dump(self.to_dict(), f, indent=4, separators=(",", ": "))
 
     @classmethod
-    def from_dict(cls, dict: dict):
-        for key, value in dict.items():
-            setattr(cls, key, value)
+    def from_dict(cls, config_dict: dict):
+        instance = cls()
+        for key, value in config_dict.items():
+            if hasattr(instance, key):
+                setattr(instance, key, value)
+        return instance
 
     @classmethod
     def from_json(self, path: str):
         with open(path, "r") as f:
-            dict = json.load(f)
-        self.from_dict(dict)
+            config_dict = json.load(f)
+        return self.from_dict(config_dict)

@@ -9,7 +9,7 @@ from typing import Optional, Union
 class ModelConfig():
     modelname: str
     d_input: int = 895  # TODO: automatically set
-    d_model: int = 1024
+    d_model: int = 512
     n_blocks: int = 2
     d_ff: int = 512
     ln_eps: float = 1e-5
@@ -37,15 +37,18 @@ class ModelConfig():
                 f"Activation {self.activation} not implemented")
 
     @classmethod
-    def from_dict(cls, dict: dict):
-        for key, value in dict.items():
-            setattr(cls, key, value)
+    def from_dict(cls, config_dict: dict):
+        instance = cls()
+        for key, value in config_dict.items():
+            if hasattr(instance, key):
+                setattr(instance, key, value)
+        return instance
 
     @classmethod
     def from_json(cls, path: str):
         with open(path, "r") as f:
-            dict = json.load(f)
-        cls.from_dict(dict)
+            config_dict = json.load(f)
+        return cls.from_dict(config_dict)
 
     @staticmethod
     def create_model_config(modelname: str, **kwargs):

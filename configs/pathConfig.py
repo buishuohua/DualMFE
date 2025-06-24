@@ -6,7 +6,6 @@ from utils.exceptions import NoExperimentFound, NoCheckpointFound
 
 @dataclass
 class PathConfig:
-    #TODO: root path should be passed in main or train scripts
     root_path: str
     data_dir: str = "data"
     raw_dir: str = "raw"

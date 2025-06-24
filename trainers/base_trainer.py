@@ -29,12 +29,12 @@ class BaseTrainer(ABC):
         self.num_epochs = self.train_config.num_epochs
         self.save_freq = self.train_config.save_freq
         self.continue_learning = self.train_config.continue_learning
-        self.early_stop_patience = self.train_config.early_stop_patience
-        self.device = self.train_config.device
+        self.use_early_stop = self.train_config.use_early_stop
+        self.early_stop_patience = self.train_config.early_stop_patience if self.use_early_stop else None
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
 
     def _init(self):
-        # TODO: could specify the optimizer and scheduler params
-        # TODO: more ideal way to solve early stop
         self.build_model()
         if not hasattr(self, "model") or self.model is None:
             raise NotImplementedError("Model not built")
@@ -42,8 +42,9 @@ class BaseTrainer(ABC):
         self.scheduler = self.train_config.get_shceduler(self.optimizer)
         self.loss_fn = self.train_config.get_loss_fn()
         self.epoch = 0
-        self.early_stopped = False
-        self.early_stop_count = 0
+        if self.use_early_stop:
+            self.early_stopped = False
+            self.early_stop_count = 0
         self.best_epoch = 0
         self.best_loss = float("inf")
         self.loss = 0
@@ -72,12 +73,13 @@ class BaseTrainer(ABC):
             "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "scheduler_state_dict": self.scheduler.state_dict(),
-            "early_stopped": self.early_stopped,
-            "early_stop_count": self.early_stop_count,
             "best_epoch": self.best_epoch,
             "best_loss": self.best_loss,
         }
-        # TODO: If best is ckpt, need to solve mismatch
+        if self.use_early_stop:
+            ckpt["early_stopped"] = self.early_stopped
+            ckpt["early_stop_count"] = self.early_stop_count
+
         if best:
             ckpt_name = "ckpt_best.pth"
         else:
@@ -86,7 +88,6 @@ class BaseTrainer(ABC):
         torch.save(ckpt, ckpt_path)
 
     def load_model(self, expr: str = None, epoch: int = None, best: bool = False):
-        # TODO: Set default to continue learning at the latest checkpoint
         if expr is None:
             expr = self.path_config.find_latest_expr()
         self.path_config.create_expr(expr)
@@ -111,12 +112,15 @@ class BaseTrainer(ABC):
                     state[k] = v.to(self.device)
         self.scheduler.load_state_dict(ckpt["scheduler_state_dict"])
         self.epoch = ckpt["epoch"]
-        self.early_stopped = ckpt["early_stopped"]
-        self.early_stop_count = ckpt["early_stop_count"]
+        if self.use_early_stop:
+            self.early_stopped = ckpt["early_stopped"]
+            self.early_stop_count = ckpt["early_stop_count"]
         self.best_epoch = ckpt["best_epoch"]
         self.best_loss = ckpt["best_loss"]
 
     def handle_early_stopped(self):
+        if not self.use_early_stop:
+            return
         if self.early_stopped:
             self.logger.warning(
                 f"Latest Experiment {self.path_config.expr_name} has early stopped")
@@ -207,7 +211,6 @@ class BaseTrainer(ABC):
         return ttl_loss / len(self.train_loader)
 
     def train(self):
-        # TODO: Beautify the pbar
         self.prepare_learning()
         self.logger.info("Device Selected: " + str(self.device))
         self.load_train_data()
@@ -236,12 +239,13 @@ class BaseTrainer(ABC):
                     "Best model saved at epoch: " + str(current_epoch))
                 self.early_stop_count = 0
             else:
-                self.early_stop_count += 1
-                if self.early_stop_count >= self.early_stop_patience:
-                    self.early_stopped = True
-                    self.logger.warning(
-                        "Early stopped at epoch: " + str(current_epoch))
-                    break
+                if self.use_early_stop:
+                    self.early_stop_count += 1
+                    if self.early_stop_count >= self.early_stop_patience:
+                        self.early_stopped = True
+                        self.logger.warning(
+                            "Early stopped at epoch: " + str(current_epoch))
+                        break
 
             if self.epoch % self.save_freq == 0:
                 self.save_model()

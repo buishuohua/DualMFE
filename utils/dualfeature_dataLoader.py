@@ -42,5 +42,6 @@ class DualFeature_Dataset(Dataset):
 
 class DualFeature_DataLoader(DataLoader):
     # TODO: add num_workers as a hyperparameter, batchsize not used
-    def __init__(self, dataset: DualFeature_Dataset, batch_size = 256, shuffle = True, drop_last = True):
-        super().__init__(dataset=dataset, batch_size=batch_size, shuffle=shuffle, drop_last=drop_last)
+    def __init__(self, dataset: DualFeature_Dataset, batch_size=256, shuffle=True, drop_last=True):
+        super().__init__(dataset=dataset, batch_size=batch_size,
+                         shuffle=shuffle, drop_last=drop_last)
