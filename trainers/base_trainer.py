@@ -60,25 +60,12 @@ class BaseTrainer(ABC):
         self.logger = logging.getLogger()
 
     def init_tensorboard(self):
-        os.makedirs(self.path_config.tb_dir, exist_ok=True)
         self.writer = SummaryWriter(self.path_config.tb_dir)
 
     def save_config(self):
         self.data_config.to_json(self.path_config.configs_dir)
         self.train_config.to_json(self.path_config.configs_dir)
         self.model_config.to_json(self.path_config.configs_dir)
-
-    def _check_early_stopped(self, expr_name: str):
-        if not self.use_early_stop:
-            return False
-        logging_path = os.path.join(
-            self.path_config.expr_dir, expr_name, "runs", "logging", "train.log")
-        if not os.path.exists(logging_path):
-            raise NoExperimentFound(f"{expr_name} not found")
-        with open(logging_path, "r") as f:
-            log_content = f.read()
-            if "Early stopped at epoch" in log_content:
-                return True
 
     def save_model(self, best: bool = False):
         ckpt = {
@@ -99,6 +86,35 @@ class BaseTrainer(ABC):
             ckpt_name = f"ckpt_{self.epoch}.pth"
         ckpt_path = os.path.join(self.path_config.models_dir, ckpt_name)
         torch.save(ckpt, ckpt_path)
+
+    def _check_early_stopped(self, expr_name: str):
+        if not self.use_early_stop:
+            return False
+        logging_path = os.path.join(
+            self.path_config.expr_dir, expr_name, "runs", "logging", "train.log")
+        if not os.path.exists(logging_path):
+            raise NoExperimentFound(f"{expr_name} not found")
+        with open(logging_path, "r") as f:
+            log_content = f.read()
+            if "Early stopped at epoch" in log_content:
+                return True
+
+    def _check_model_compatibility(self, expr_name: str):
+        model_config_path = os.path.join(
+            self.path_config.expr_dir, expr_name, "runs", "configs", "model_config.json")
+        if not os.path.exists(model_config_path):
+            raise NoExperimentFound(f"{expr_name} not found")
+
+        with open(model_config_path, "r") as f:
+            loaded_config = json.load(f)
+
+        selected_model_name = self.model_config.modelname
+        loaded_model_name = loaded_config.get("modelname")
+
+        if selected_model_name != loaded_model_name:
+            return False
+        else:
+            return True
 
     def _prepare_net(self):
         self.build_model()
@@ -156,6 +172,20 @@ class BaseTrainer(ABC):
                 if not os.path.exists(os.path.join(self.path_config.expr_dir, expr_name)):
                     raise NoExperimentFound(f"{expr_name} not found")
             self.path_config.create_expr(expr_name)
+
+            model_compatible = self._check_model_compatibility(expr_name)
+            if not model_compatible:
+                response = input(
+                    f"Model mismatch, start a new experiment with selected model:{self.model_config.modelname}? (y/n) ")
+                if response.lower() == "y":
+                    self._create_fresh_experiment()
+                    self.logger.warning(
+                        f"Selected Model:{self.model_config.modelname} mismatch with previous experiment {expr_name}, start a new experiment from scratch")
+                    self.logger.info(
+                        "New experiment created: " + self.path_config.expr_name)
+                else:
+                    print("Refuse to start a new experiment with selected model, exit.")
+                    sys.exit(1)
 
             prev_early_stopped = self._check_early_stopped(expr_name)
             if prev_early_stopped:
@@ -296,7 +326,25 @@ class BaseTrainer(ABC):
             return ttl_loss / len(self.val_loader)
 
     def test(self, expr: str = None):
-        self.model = self.load_model(expr=expr, best=True)
+        if expr is None:
+            try:
+                expr = self.path_config.find_latest_expr()
+            except NoExperimentFound:
+                raise NoExperimentFound("Cannot find any experiment")
+        else:
+            if not os.path.exists(os.path.join(self.path_config.expr_dir, expr)):
+                raise NoExperimentFound(f"{expr} not found")
+        self.path_config.create_expr(expr)
+        self.init_logging()
+
+        model_compatible = self._check_model_compatibility(expr)
+        if not model_compatible:
+            print(
+                f"Model mismatch, change the model selection in terminal to match with {expr}")
+            sys.exit(1)
+
+        self.load_model(expr=expr, best=True)
+
         self.model.to(self.device)
         self.model.eval()
         self.load_test_data()
@@ -304,20 +352,22 @@ class BaseTrainer(ABC):
             self.logger.info("Best Model loaded, Start testing...")
         with torch.no_grad():
             ttl_loss = 0
-            for X, y in self.test_loader:
-                X, y = X.to(self.device), y.to(self.device)
+            for k_features, a_features, y in self.test_loader:
+                k_features, a_features, y = k_features.to(
+                    self.device), a_features.to(self.device), y.to(self.device)
+                X = torch.cat((k_features, a_features), dim=2)
                 output = self.model(X)
                 loss = self.loss_fn(output, y)
                 ttl_loss += loss.item()
             avg_loss = ttl_loss / len(self.test_loader)
-        metrics = {"loss": avg_loss}
+        metrics = {"loss": round(avg_loss, 4)}
         metrics_filename = os.path.join(
             self.path_config.metrics_dir, "test_metrics.json")
         with open(metrics_filename, "w") as f:
             json.dump(metrics, f, indent=4, separators=(",", ": "))
         if hasattr(self, "logger"):
             self.logger.info("Test metrics saved")
-            self.logger.info(f"Test loss: {avg_loss}")
+            self.logger.info(f"Test loss: {avg_loss:.4f}")
 
     @abstractmethod
     def build_model(self):

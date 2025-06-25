@@ -9,9 +9,9 @@ from typing import Optional, Union
 class ModelConfig():
     modelname: str
     d_input: int = 895  # TODO: automatically set
-    d_model: int = 512
-    n_blocks: int = 2
-    d_ff: int = 512
+    d_model: int = 256
+    n_blocks: int = 8
+    d_ff: int = 1024
     ln_eps: float = 1e-5
 
     dropout: float = 0.2
@@ -70,7 +70,9 @@ class GRUConfig(ModelConfig):
 
 
 class vTransformerConfig(ModelConfig):
+    # TODO: PE type
     def __init__(self, **kwargs):
         kwargs['modelname'] = "vTransformer"
         super().__init__(**kwargs)
         self.n_heads = kwargs.get('n_heads', 8)
+        self.pe = kwargs.get('pe', "relative")

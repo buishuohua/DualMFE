@@ -1,4 +1,3 @@
-import torch
 import torch.nn as nn
 
 
@@ -23,20 +22,11 @@ class GRUBlock(nn.Module):
     def forward(self, x):
         residual_x = x
         x = self.layernorm1(x)
-        if torch.isnan(x).any():
-            print("GRU block layernorm1 contains nan")
         gru_output, _ = self.gru(x)
-        if torch.isnan(gru_output).any():
-            print("GRU block gru contains nan")
         x = residual_x + gru_output
         residual_gru = x
         x = self.layernorm2(x)
-        if torch.isnan(x).any():
-            print("GRU block layernorm2 contains nan")
-
         ff_out = self.ff(x)
-        if torch.isnan(ff_out).any():
-            print("GRU block ff contains nan")
         out = residual_gru + ff_out
         return out
 

@@ -8,6 +8,7 @@ from utils.seed import set_seed
 
 
 def main(args):
+    set_seed(args.seed)
     root_path = args.root_path
 
     path_config = PathConfig(root_path=root_path)

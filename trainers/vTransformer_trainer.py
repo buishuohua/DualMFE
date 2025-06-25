@@ -1,7 +1,4 @@
 from .base_trainer import BaseTrainer
-import torch
-import torch.nn as nn
-from tqdm import tqdm
 from models.AFF import vTransformer
 
 
@@ -11,4 +8,4 @@ class vTransformerTrainer(BaseTrainer):
 
     def build_model(self):
         if not hasattr(self, "model"):
-            self.model = vTransformer(self.model_config.to_dict())
+            self.model = vTransformer(self.model_config)
