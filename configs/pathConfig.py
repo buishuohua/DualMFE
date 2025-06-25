@@ -47,8 +47,7 @@ class PathConfig:
         if expr_name is None:
             expr_name = time.strftime("%Y%m%d-%H%M%S")
 
-        if not hasattr(self, "expr_name"):
-            self.expr_name = expr_name
+        self.expr_name = expr_name
         self.expr_specific_dir = os.path.join(self.expr_dir, self.expr_name)
         self.train_dir = os.path.join(self.expr_specific_dir, self.train_dir)
 
@@ -86,7 +85,8 @@ class PathConfig:
         ckpt_files = os.listdir(self.models_dir)
         ckpt_files = [f for f in ckpt_files if f.startswith("ckpt_") and f.endswith(".pth")]
         ckpt_files = [f.split(".")[0] for f in ckpt_files]
-        ckpt_files = [int(f.split("_")[1]) for f in ckpt_files]
+        ckpt_files = [int(f.split("_")[1])
+                      for f in ckpt_files if f.split("_")[1].isdigit()]
         if len(ckpt_files) == 0:
             raise NoCheckpointFound()
         return max(ckpt_files)

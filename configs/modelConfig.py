@@ -14,7 +14,7 @@ class ModelConfig():
     d_ff: int = 512
     ln_eps: float = 1e-5
 
-    dropout: float = 0.1
+    dropout: float = 0.2
     activation: str = "gelu"
 
     def to_dict(self):

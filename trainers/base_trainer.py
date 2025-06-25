@@ -4,10 +4,12 @@ import os
 import sys
 import json
 import torch
+import time
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 import pandas as pd
 from tqdm import tqdm
+from configs.pathConfig import PathConfig
 from utils.train_val_split import train_val_split
 from utils.dualfeature_dataLoader import DualFeature_Dataset, DualFeature_DataLoader
 from utils.exceptions import NoExperimentFound, NoCheckpointFound
@@ -34,25 +36,23 @@ class BaseTrainer(ABC):
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu")
 
-    def _init(self):
-        self.build_model()
-        if not hasattr(self, "model") or self.model is None:
-            raise NotImplementedError("Model not built")
-        self.optimizer = self.train_config.get_optimizer(self.model)
-        self.scheduler = self.train_config.get_shceduler(self.optimizer)
-        self.loss_fn = self.train_config.get_loss_fn()
+    def _create_fresh_experiment(self):
+        root_path = self.path_config.root_path
+        self.path_config = PathConfig(root_path)
+        new_expr_name = time.strftime("%Y%m%d-%H%M%S")
+        self.path_config.create_expr(new_expr_name)
+        self.init_logging()
+        self.init_tensorboard()
+        self._prepare_net()
+
         self.epoch = 0
         if self.use_early_stop:
             self.early_stopped = False
             self.early_stop_count = 0
         self.best_epoch = 0
-        self.best_loss = float("inf")
         self.loss = 0
-        self.path_config.create_expr()
-        if not hasattr(self, "logger"):
-            self.init_logging()
-        if not hasattr(self, "writer"):
-            self.init_tensorboard()
+        self.best_loss = float("inf")
+
 
     def init_logging(self):
         logging.basicConfig(
@@ -60,12 +60,25 @@ class BaseTrainer(ABC):
         self.logger = logging.getLogger()
 
     def init_tensorboard(self):
+        os.makedirs(self.path_config.tb_dir, exist_ok=True)
         self.writer = SummaryWriter(self.path_config.tb_dir)
 
     def save_config(self):
         self.data_config.to_json(self.path_config.configs_dir)
         self.train_config.to_json(self.path_config.configs_dir)
         self.model_config.to_json(self.path_config.configs_dir)
+
+    def _check_early_stopped(self, expr_name: str):
+        if not self.use_early_stop:
+            return False
+        logging_path = os.path.join(
+            self.path_config.expr_dir, expr_name, "runs", "logging", "train.log")
+        if not os.path.exists(logging_path):
+            raise NoExperimentFound(f"{expr_name} not found")
+        with open(logging_path, "r") as f:
+            log_content = f.read()
+            if "Early stopped at epoch" in log_content:
+                return True
 
     def save_model(self, best: bool = False):
         ckpt = {
@@ -87,9 +100,16 @@ class BaseTrainer(ABC):
         ckpt_path = os.path.join(self.path_config.models_dir, ckpt_name)
         torch.save(ckpt, ckpt_path)
 
-    def load_model(self, expr: str = None, epoch: int = None, best: bool = False):
-        if expr is None:
-            expr = self.path_config.find_latest_expr()
+    def _prepare_net(self):
+        self.build_model()
+        if not hasattr(self, "optimizer"):
+            self.optimizer = self.train_config.get_optimizer(self.model)
+        if not hasattr(self, "scheduler"):
+            self.scheduler = self.train_config.get_shceduler(self.optimizer)
+        if not hasattr(self, "loss_fn"):
+            self.loss_fn = self.train_config.get_loss_fn()
+
+    def load_model(self, expr: str, epoch: int = None, best: bool = False):
         self.path_config.create_expr(expr)
         if best:
             model_path = os.path.join(
@@ -102,8 +122,9 @@ class BaseTrainer(ABC):
 
         if not os.path.exists(model_path):
             raise NoCheckpointFound()
+
         ckpt = torch.load(model_path)
-        self._init()
+        self._prepare_net()
         self.model.load_state_dict(ckpt["model_state_dict"])
         self.optimizer.load_state_dict(ckpt["optimizer_state_dict"])
         for state in self.optimizer.state.values():
@@ -112,57 +133,63 @@ class BaseTrainer(ABC):
                     state[k] = v.to(self.device)
         self.scheduler.load_state_dict(ckpt["scheduler_state_dict"])
         self.epoch = ckpt["epoch"]
+        self.best_epoch = ckpt["best_epoch"]
+        self.best_loss = ckpt["best_loss"]
         if self.use_early_stop:
             self.early_stopped = ckpt["early_stopped"]
             self.early_stop_count = ckpt["early_stop_count"]
-        self.best_epoch = ckpt["best_epoch"]
-        self.best_loss = ckpt["best_loss"]
-
-    def handle_early_stopped(self):
-        if not self.use_early_stop:
-            return
-        if self.early_stopped:
-            self.logger.warning(
-                f"Latest Experiment {self.path_config.expr_name} has early stopped")
-            new_expr = input(
-                f"Latest Experiment {self.path_config.expr_name} has early stopped, start a new experiment? (y/n) ")
-            if new_expr.lower() == "y":
-                self._init()
-                self.logger.info("Start training from scratch")
-                self.logger.info(
-                    f"New experiment created: {self.path_config.expr_name}")
-            else:
-                self.logger.info("Refuse to start a new experiment, exit.")
-                sys.exit(1)
 
     def prepare_learning(self):
         if self.continue_learning:
-            if self.train_config.continue_expr is None:
+            expr_name = self.train_config.continue_expr
+            if expr_name is None:
                 try:
-                   latest_expr = self.path_config.find_latest_expr()
+                    expr_name = self.path_config.find_latest_expr()
                 except NoExperimentFound:
-                    latest_expr = None
-                if latest_expr is None:
-                    self._init()
-                    self.logger.info("No experiment found, Start training from scratch")
-                    self.logger.info(f"New experiment created: {self.path_config.expr_name}")
-                else:
-                    self.load_model(expr=latest_expr, best=False)
-                    self.handle_early_stopped()
+                    self._create_fresh_experiment()
                     self.logger.info(
-                        f"Model loaded, Continue learning from {latest_expr}, Epoch: {self.epoch}")
+                        "Continue learning is False, Start training from scratch")
+                    self.logger.info(
+                        "New experiment created: " + self.path_config.expr_name)
+                    return
             else:
-                self.load_model(
-                    expr=self.train_config.continue_expr, best=False)
-                self.handle_early_stopped()
+                if not os.path.exists(os.path.join(self.path_config.expr_dir, expr_name)):
+                    raise NoExperimentFound(f"{expr_name} not found")
+            self.path_config.create_expr(expr_name)
+
+            prev_early_stopped = self._check_early_stopped(expr_name)
+            if prev_early_stopped:
+                response = input(
+                    f"Experiment {expr_name} has early stopped, start a new experiment? (y/n) ")
+                if response.lower() == "y":
+                    self._create_fresh_experiment()
+                    self.logger.warning(
+                        f"Experiment {expr_name} has early stopped, start a new experiment from scratch")
+                    self.logger.info(
+                        "New experiment created: " + self.path_config.expr_name)
+                    return
+                else:
+                    print("Refuse to start a new experiment, exit.")
+                    sys.exit(1)
+
+            try:
+                self.load_model(expr_name, best=False)
+                self.init_logging()
+                self.init_tensorboard()
 
                 self.logger.info(
-                    f"Model loaded, Continue learning from {self.train_config.continue_expr}, Epoch: {self.epoch}")
+                    f"Model loaded, Continue learning from {expr_name}, Epoch: {self.epoch}")
+            except NoCheckpointFound:
+                self._create_fresh_experiment()
+                self.logger.warning(
+                    f"No checkpoint found for latest experiment {expr_name}, Start training from scratch")
+                self.logger.info(
+                    "New experiment created: " + self.path_config.expr_name)
         else:
-            self._init()
+            self._create_fresh_experiment()
             self.logger.info("Continue learning is False, Start training from scratch")
             self.logger.info(
-                f"New experiment created: {self.path_config.expr_name}")
+                "New experiment created: " + self.path_config.expr_name)
         self.save_config()
         self.logger.info("Config saved")
 

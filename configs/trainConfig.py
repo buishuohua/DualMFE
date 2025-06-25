@@ -11,8 +11,7 @@ from typing import Optional, Tuple
 
 @dataclass
 class OptimizerConfig:
-    name: str = "AdamW"
-    weight_decay: float = 1e-6
+    weight_decay: float = 1e-5
     betas: Tuple[float, float] = (0.9, 0.999)
     eps: float = 1e-8
 
@@ -30,7 +29,6 @@ class OptimizerConfig:
 
 @dataclass
 class SchedulerConfig:
-    name: str = "ReduceLROnPlateau"
     mode: str = "min"
     factor: float = 0.5
     patience: int = 100
@@ -56,6 +54,8 @@ class TrainConfig:
     num_epochs: int = 1000
     save_freq: int = 50
     learning_rate: float = 5e-5
+    optimizer_name: str = "AdamW"
+    scheduler_name: str = "ReduceLROnPlateau"
     optimizer_config: OptimizerConfig = field(default_factory=OptimizerConfig)
     scheduler_config: SchedulerConfig = field(default_factory=SchedulerConfig)
 
@@ -79,18 +79,19 @@ class TrainConfig:
     def get_optimizer(self, model: nn.Module):
         optimizer_params = self.optimizer_config.to_dict()
         optimizer_params["lr"] = self.learning_rate
-        del optimizer_params["name"]
-        if self.optimizer_config.name == "Adam":
+        if self.optimizer_name == "Adam":
             return Adam(model.parameters(), **optimizer_params)
-        elif self.optimizer_config.name == "AdamW":
+        elif self.optimizer_name == "AdamW":
             return AdamW(model.parameters(), **optimizer_params)
         else:
             raise NotImplementedError
 
     def get_shceduler(self, optimizer: Optimizer):
         scheduler_params = self.scheduler_config.to_dict()
-        del scheduler_params["name"]
-        return ReduceLROnPlateau(optimizer, **self.scheduler_config.to_dict())
+        if self.scheduler_name == "ReduceLROnPlateau":
+            return ReduceLROnPlateau(optimizer, **scheduler_params)
+        else:
+            raise NotImplementedError
 
     def get_loss_fn(self):
         if self.criterion == "MSE":
