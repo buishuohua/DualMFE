@@ -19,8 +19,9 @@ class baseGRU(nn.Module):
         ln_eps = modelconfig.ln_eps
 
         self.n_blocks = modelconfig.n_blocks
+        self.emb = FeatureLinearEmbedding(d_feature, d_model, dropout)
         self.gru_blocks = nn.ModuleList(
-            [GRUBlock(d_model, n_layers, dropout, d_ff, activation, ln_eps, bidirection=False) for _ in range(self.n_blocks)])
+            [GRUBlock(d_model, n_layers, dropout, d_ff, activation, ln_eps) for _ in range(self.n_blocks)])
 
         self.layernorm = nn.LayerNorm(d_model, ln_eps)
         self.fc = nn.Linear(d_model, 1)

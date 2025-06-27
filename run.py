@@ -3,6 +3,8 @@ import argparse
 import os
 import sys
 from utils.exceptions import ModeNotSupported
+
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-m", "--mode", type=str, default="train",

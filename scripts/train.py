@@ -17,9 +17,13 @@ def main(args):
     learning_rate = args.learning_rate
     optimizer = args.optimizer
 
+    feature_engineering = args.feature_engineering
+    # TODO: check dimension
+    d_feature = 895 + 2 if feature_engineering else 895
+
     model_kwargs = {
         "seq_len": lookback_window,
-        "d_feature": lookback_window,
+        "d_feature": d_feature,
         "d_model": args.d_model,
         "d_ff": args.d_ff,
         "n_blocks": args.n_blocks,
