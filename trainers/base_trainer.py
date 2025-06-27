@@ -22,7 +22,6 @@ class BaseTrainer(ABC):
         self.path_config = path_config
         self._parse_params()
 
-    # TODO: Check if there is a more brilliant way to organize the parse and init
     def _parse_params(self):
         self.feature_engineering = self.data_config.feature_engineering
         self.train_data = self.path_config.train_processed_path if self.feature_engineering else self.path_config.train_raw_path
@@ -52,7 +51,6 @@ class BaseTrainer(ABC):
         self.best_epoch = 0
         self.loss = 0
         self.best_loss = float("inf")
-
 
     def init_logging(self):
         logging.basicConfig(
@@ -243,7 +241,7 @@ class BaseTrainer(ABC):
         test_dataset = DualFeature_Dataset(
             test, self.data_config.seq_len, self.data_config.stride)
         test_loader = DualFeature_DataLoader(
-            test_dataset, self.train_config.batch_size, shuffle=True, drop_last=True)
+            test_dataset, self.train_config.batch_size, shuffle=False, drop_last=False)
         if not hasattr(self, "test_loader"):
             self.test_loader = test_loader
 
@@ -351,23 +349,33 @@ class BaseTrainer(ABC):
         if hasattr(self, "logger"):
             self.logger.info("Best Model loaded, Start testing...")
         with torch.no_grad():
-            ttl_loss = 0
+            all_preds = []
+            all_targets = []
             for k_features, a_features, y in self.test_loader:
                 k_features, a_features, y = k_features.to(
                     self.device), a_features.to(self.device), y.to(self.device)
                 X = torch.cat((k_features, a_features), dim=2)
                 output = self.model(X)
-                loss = self.loss_fn(output, y)
-                ttl_loss += loss.item()
-            avg_loss = ttl_loss / len(self.test_loader)
-        metrics = {"loss": round(avg_loss, 4)}
+                all_preds.append(output.cpu())
+                all_targets.append(y.cpu())
+            all_preds = torch.cat(all_preds, dim=0)
+            all_targets = torch.cat(all_targets, dim=0)
+            mse = self.loss_fn(all_preds, all_targets).item()
+            rmse = torch.sqrt(torch.tensor(mse)).item()
+            mae = nn.L1Loss()(all_preds, all_targets).item()
+        metrics = {
+            "mse": round(mse, 4),
+            "rmse": round(rmse, 4),
+            "mae": round(mae, 4),
+        }
         metrics_filename = os.path.join(
             self.path_config.metrics_dir, "test_metrics.json")
         with open(metrics_filename, "w") as f:
             json.dump(metrics, f, indent=4, separators=(",", ": "))
         if hasattr(self, "logger"):
             self.logger.info("Test metrics saved")
-            self.logger.info(f"Test loss: {avg_loss:.4f}")
+            self.logger.info(
+                f"TEST MSE: {mse:.4f}, RMSE: {rmse:.4f}, MAE: {mae:.4f}")
 
     @abstractmethod
     def build_model(self):

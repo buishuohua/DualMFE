@@ -6,19 +6,44 @@ import torch.nn as nn
 from typing import Optional, Union
 
 @dataclass
-class ModelConfig():
+class ModelConfig:
     modelname: str
-    d_input: int = 895  # TODO: automatically set
+    d_feature: int = 895
+    seq_len: int = 120
     d_model: int = 256
     n_blocks: int = 8
     d_ff: int = 1024
     ln_eps: float = 1e-5
-
     dropout: float = 0.2
     activation: str = "gelu"
 
+    # Transformer parameters
+    n_heads: Optional[int] = None
+    mask_flag: Optional[bool] = None
+    attn_dropout: Optional[float] = None
+    pe: Optional[str] = None
+
+    def __post_init__(self):
+        if self.modelname == "vTransformer":
+            if self.n_heads is None:
+                self.n_heads = 8
+            if self.mask_flag is None:
+                self.mask_flag = True
+            if self.attn_dropout is None:
+                self.attn_dropout = 0.2
+            if self.pe is None:
+                self.pe = "relative"
+
+        elif self.modelname == "iTransformer":
+            if self.n_heads is None:
+                self.n_heads = 8
+            if self.mask_flag is None:
+                self.mask_flag = False
+            if self.attn_dropout is None:
+                self.attn_dropout = 0.2
+
     def to_dict(self):
-        return self.__dict__
+        return {k: v for k, v in self.__dict__.items() if v is not None}
 
     def to_json(self, path: str):
         filename = os.path.join(path, "model_config.json")
@@ -49,30 +74,3 @@ class ModelConfig():
         with open(path, "r") as f:
             config_dict = json.load(f)
         return cls.from_dict(config_dict)
-
-    @staticmethod
-    def create_model_config(modelname: str, **kwargs):
-        if modelname == "GRU":
-            return GRUConfig(**kwargs)
-        elif modelname == "vTransformer":
-            return vTransformerConfig(**kwargs)
-        else:
-            raise NotImplementedError(f"Model {modelname} not implemented")
-
-
-class GRUConfig(ModelConfig):
-    def __init__(self, **kwargs):
-        kwargs['modelname'] = "GRU"
-        super().__init__(**kwargs)
-        self.n_layers = kwargs.get('n_layers', 4)
-        self.d_hidden = kwargs.get('d_hidden', 256)
-        self.bidirection = kwargs.get('bidirection', False)
-
-
-class vTransformerConfig(ModelConfig):
-    # TODO: PE type
-    def __init__(self, **kwargs):
-        kwargs['modelname'] = "vTransformer"
-        super().__init__(**kwargs)
-        self.n_heads = kwargs.get('n_heads', 8)
-        self.pe = kwargs.get('pe', "relative")
