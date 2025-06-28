@@ -2,6 +2,9 @@ from scripts import train, test
 import argparse
 import os
 import sys
+current_dir = os.path.dirname(os.path.abspath(__file__))
+print(current_dir)
+sys.path.insert(0, current_dir)
 from utils.exceptions import ModeNotSupported
 
 
@@ -66,5 +69,7 @@ def run():
     else:
         raise ModeNotSupported(f"{args.mode} not supported")
 
+
 if __name__ == "__main__":
+
     run()

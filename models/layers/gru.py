@@ -2,14 +2,13 @@ import torch.nn as nn
 
 
 class GRUBlock(nn.Module):
-    def __init__(self, d_model, n_layers, dropout, bidirection, d_ff, activation, ln_eps):
+    def __init__(self, d_model, n_layers, dropout, d_ff, activation, ln_eps):
         super().__init__()
         self.d_model = d_model
         self.n_layers = n_layers
         self.dropout = dropout
-        self.bidirection = bidirection
         self.gru = nn.GRU(d_model, d_model, n_layers,
-                          batch_first=True, dropout=dropout, bidirectional=bidirection)
+                          batch_first=True, dropout=dropout, bidirectional=False)
         self.ff = nn.Sequential(
             nn.Linear(d_model, d_ff),
             activation,
