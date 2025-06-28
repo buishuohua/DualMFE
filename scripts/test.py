@@ -13,6 +13,8 @@ def main(args):
     root_path = args.root_path
     lookback_window = args.lookback_window
     stride = args.stride
+    start_timestep = args.start_timestep
+
     batch_size = args.batch_size
     learning_rate = args.learning_rate
     optimizer = args.optimizer
@@ -39,7 +41,7 @@ def main(args):
 
     path_config = PathConfig(root_path=root_path)
     data_config = DataConfig(seq_len=lookback_window, stride=stride,
-                             feature_engineering=feature_engineering)
+                             feature_engineering=feature_engineering, start_timestep=start_timestep)
     train_config = TrainConfig(
         batch_size=batch_size, learning_rate=learning_rate, optimizer_name=optimizer)
     model_config = ModelConfig(modelname=args.model, **model_kwargs)

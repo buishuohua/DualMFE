@@ -41,6 +41,8 @@ def parse_args():
     parser.add_argument("-e", "--expr", type=str, default=None,
                         help="Experiment name need to continue learning or test")
 
+    parser.add_argument("-ts", "--start_timestep", type=str, default="2023-09-01 00:00:00",
+                        help="Start timestep for training data")
     parser.add_argument('-w', "--lookback_window", type=int, default=120,
                         help="Lookback window size")
     parser.add_argument("-st", "--stride", type=int, default=120,

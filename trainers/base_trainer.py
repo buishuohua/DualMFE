@@ -222,7 +222,8 @@ class BaseTrainer(ABC):
         self.logger.info("Config saved")
 
     def load_train_data(self):
-        train, val = train_val_split(self.train_data, self.val_ratio)
+        train, val = train_val_split(
+            self.train_data,  self.data_config.start_timestep, self.val_ratio)
         train_dataset = DualFeature_Dataset(
             train, self.data_config.seq_len, self.data_config.stride)
         val_dataset = DualFeature_Dataset(

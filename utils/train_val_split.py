@@ -5,10 +5,12 @@ from pandas import DataFrame
 from typing import Tuple
 
 
-def train_val_split(data_path: str, val_size: float = 0.2) -> Tuple[DataFrame, DataFrame]:
+def train_val_split(data_path: str, start_timestep: str, val_size: float = 0.2) -> Tuple[DataFrame, DataFrame]:
     data = pd.read_parquet(data_path)
     if not isinstance(data.index, pd.DatetimeIndex):
         data.index = pd.to_datetime(data.index)
+    start_timestep = pd.to_datetime(start_timestep)
+    data = data[data.index >= start_timestep]
     unique_dates = pd.Series(np.unique(data.index.date))
     train_dates, val_dates = train_test_split(unique_dates, test_size=val_size)
     train_mask = np.isin(data.index.date, train_dates)
