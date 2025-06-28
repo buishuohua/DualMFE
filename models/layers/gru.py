@@ -8,7 +8,7 @@ class GRUBlock(nn.Module):
         self.n_layers = n_layers
         self.dropout = dropout
         self.gru = nn.GRU(d_model, d_model, n_layers,
-                          batch_first=True, dropout=dropout)
+                          batch_first=True, dropout=dropout, bidirectional=False)
         self.ff = nn.Sequential(
             nn.Linear(d_model, d_ff),
             activation,
