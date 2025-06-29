@@ -13,5 +13,5 @@ python -u run.py \
     --dropout 0.2 \
     --lookback_window 120 \
     --stride 120 \
-    --batch_size 256 \
+    --batch_size 64 \
     --optimizer AdamW
