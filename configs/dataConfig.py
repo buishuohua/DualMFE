@@ -7,7 +7,7 @@ class DataConfig:
     val_size : float = 0.2
     seq_len : int = 120
     stride : int = 120
-    start_timestep: str = "2023-09-01 00:00:00"
+    start_timestep: str = "2023-03-01 00:00:00"
     feature_engineering: bool = False
 
     def to_dict(self):

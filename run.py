@@ -41,7 +41,7 @@ def parse_args():
     parser.add_argument("-e", "--expr", type=str, default=None,
                         help="Experiment name need to continue learning or test")
 
-    parser.add_argument("-ts", "--start_timestep", type=str, default="2023-09-01 00:00:00",
+    parser.add_argument("-ts", "--start_timestep", type=str, default="2023-03-01 00:00:00",
                         help="Start timestep for training data")
     parser.add_argument('-w', "--lookback_window", type=int, default=120,
                         help="Lookback window size")
@@ -56,6 +56,14 @@ def parse_args():
                         help="Learning rate")
     parser.add_argument('-o', "--optimizer", type=str, default="AdamW",
                         choices=["Adam", "AdamW"], help="Optimizer to use")
+    parser.add_argument('-es', "--use_early_stop", default=False, action="store_true",
+                        help="Whether to use early stopping")
+    parser.add_argument('-esp', "--early_stop_patience", type=int, default=100,
+                        help="Patience for early stopping")
+    parser.add_argument('-gc', "--grad_clip", default=False, action="store_true",
+                        help="Whether to clip gradient")
+    parser.add_argument('-gn', "--grad_norm", type=float, default=1.0,
+                        help="Gradient norm")
 
     return parser.parse_args()
 

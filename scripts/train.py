@@ -11,21 +11,18 @@ from utils.exceptions import ModelNotSupported
 def main(args):
     set_seed(args.seed)
     root_path = args.root_path
-    lookback_window = args.lookback_window
-    stride = args.stride
-    start_timestep = args.start_timestep
 
-    batch_size = args.batch_size
-    continue_learning = args.continue_learning
-    learning_rate = args.learning_rate
-    optimizer = args.optimizer
-
-    feature_engineering = args.feature_engineering
+    data_kwargs = {
+        "seq_len": args.lookback_window,
+        "stride": args.stride,
+        "feature_engineering": args.feature_engineering,
+        "start_timestep": args.start_timestep
+    }
     # TODO: check dimension
-    d_feature = 895 + 2 if feature_engineering else 895
+    d_feature = 895 + 2 if args.feature_engineering else 895
 
     model_kwargs = {
-        "seq_len": lookback_window,
+        "seq_len": data_kwargs["seq_len"],
         "d_feature": d_feature,
         "d_model": args.d_model,
         "d_ff": args.d_ff,
@@ -33,6 +30,20 @@ def main(args):
         "activation": args.activation,
         "dropout": args.dropout
     }
+    train_kwargs = {
+        "batch_size": args.batch_size,
+        "learning_rate": args.learning_rate,
+        "optimizer_name": args.optimizer,
+        "use_early_stop": args.use_early_stop,
+        "early_stop_patience": args.early_stop_patience,
+        "grad_clip": args.grad_clip,
+        "grad_norm": args.grad_norm,
+        "continue_learning": args.continue_learning,
+        "continue_expr": args.expr
+    }
+
+    if train_kwargs["continue_learning"]:
+        train_kwargs["continue_expr"] = args.expr
 
     if args.model in ["vTransformer", "iTransformer"]:
         model_kwargs.update({
@@ -42,16 +53,9 @@ def main(args):
         })
 
     path_config = PathConfig(root_path)
-    data_config = DataConfig(seq_len=lookback_window, stride=stride,
-                             feature_engineering=feature_engineering, start_timestep=start_timestep)
-    train_config = TrainConfig(
-        batch_size=batch_size, learning_rate=learning_rate, optimizer_name=optimizer)
-
+    data_config = DataConfig(**data_kwargs)
+    train_config = TrainConfig(**train_kwargs)
     model_config = ModelConfig(modelname=args.model, **model_kwargs)
-
-    if continue_learning:
-        train_config.continue_learning = True
-        train_config.continue_expr = args.expr
 
     if args.model == "GRU":
         trainer = GRUTrainer(model_config, train_config,
